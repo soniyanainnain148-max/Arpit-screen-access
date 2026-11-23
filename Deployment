@@ -1,0 +1,18 @@
+# system deps
+sudo apt install -y openjdk-17-jdk apktool unzip curl nginx
+mkdir -p /opt/android && cd /opt/android
+# cmdline-tools + sdkmanager se platform 34 + build-tools 34.0.0 install karo
+
+# keystore (ek baar)
+keytool -genkeypair -v -keystore /opt/keystore/arpit.jks -alias arpit \
+  -keyalg RSA -keysize 2048 -validity 10000 -storepass 'Arpit@2026' -dname "CN=Arpit"
+
+# app
+cd ~/arpit-mobile-access
+cp .env.example .env && nano .env
+npm i
+ANDROID_JAR=/opt/android/platforms/android-34/android.jar \
+BUILD_TOOLS=/opt/android/build-tools/34.0.0 npm run payload
+
+# run
+pm2 start ecosystem.config.js && pm2 save
