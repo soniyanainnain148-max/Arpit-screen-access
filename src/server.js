@@ -12,29 +12,42 @@ const auth = require('./auth');
 const hub = require('./hub');
 const builder = require('./builder');
 
+const APK_DIR = process.env.APK_DIR || path.join(__dirname, '..', 'apks');
+fs.mkdirSync(APK_DIR, { recursive: true });
+fs.mkdirSync('/tmp/arpit-up', { recursive: true });
+
 const app = express();
 const server = http.createServer(app);
 const up = multer({ dest: '/tmp/arpit-up', limits: { fileSize: 300 * 1024 * 1024 } });
+const cookieOpts = { httpOnly: true, sameSite: 'lax', secure: !!process.env.VERCEL };
 
-app.use(express.json());
+app.set('trust proxy', 1);
+app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+app.get('/api/health', (req, res) => {
+  let dbOk = true;
+  try { db.prepare('SELECT 1').get(); } catch { dbOk = false; }
+  res.status(dbOk ? 200 : 500).json({ ok: dbOk });
+});
+
 /* ---------- auth ---------- */
 app.post('/api/register', (req, res) => {
-  const { email, password } = req.body;
+  const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'email+password' });
   if (db.prepare('SELECT 1 FROM users WHERE email=?').get(email)) return res.status(409).json({ error: 'exists' });
   const r = db.prepare('INSERT INTO users (email,hash,created) VALUES (?,?,?)')
     .run(email, auth.hash(password), Date.now());
-  res.cookie('t', auth.sign(r.lastInsertRowid), { httpOnly: true, sameSite: 'lax' });
+  res.cookie('t', auth.sign(r.lastInsertRowid), cookieOpts);
   res.json({ ok: true });
 });
 
 app.post('/api/login', (req, res) => {
-  const u = db.prepare('SELECT * FROM users WHERE email=?').get(req.body.email || '');
-  if (!u || !auth.verify(req.body.password || '', u.hash)) return res.status(401).json({ error: 'bad login' });
-  res.cookie('t', auth.sign(u.id), { httpOnly: true, sameSite: 'lax' });
+  const body = req.body || {};
+  const u = db.prepare('SELECT * FROM users WHERE email=?').get(body.email || '');
+  if (!u || !auth.verify(body.password || '', u.hash)) return res.status(401).json({ error: 'bad login' });
+  res.cookie('t', auth.sign(u.id), cookieOpts);
   res.json({ ok: true });
 });
 
@@ -49,9 +62,9 @@ app.get('/api/builds', auth.guard, (req, res) => {
   res.json(rows.map(({ secret, ...r }) => r));
 });
 
-app.post('/api/builds', auth.guard, up.single('apk'), async (req, res) => {
+app.post('/api/builds', auth.guard, up.single('apk'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'apk required' });
-  const name = (req.body.name || '').trim() || 'build-' + Date.now();
+  const name = ((req.body && req.body.name) || '').trim() || 'build-' + Date.now();
   const id = nanoid(8);
   db.prepare('INSERT INTO builds (id,name,orig,status,secret,created) VALUES (?,?,?,?,?,?)')
     .run(id, name, req.file.originalname, 'building', nanoid(24), Date.now());
@@ -68,12 +81,12 @@ app.get('/api/builds/:id', auth.guard, (req, res) => {
 app.delete('/api/builds/:id', auth.guard, (req, res) => {
   db.prepare('DELETE FROM builds WHERE id=?').run(req.params.id);
   db.prepare('DELETE FROM devices WHERE build_id=?').run(req.params.id);
-  fs.rm(path.join(__dirname, '..', 'apks', `${req.params.id}.apk`), { force: true }, () => {});
+  fs.rm(path.join(APK_DIR, `${req.params.id}.apk`), { force: true }, () => {});
   res.json({ ok: true });
 });
 
 app.get('/apks/:id.apk', (req, res) => {
-  const f = path.join(__dirname, '..', 'apks', `${req.params.id}.apk`);
+  const f = path.join(APK_DIR, `${req.params.id}.apk`);
   if (!fs.existsSync(f)) return res.status(404).end();
   res.download(f, `${req.params.id}.apk`);
 });
@@ -97,4 +110,8 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'in
 /* ---------- ws ---------- */
 hub.attach(server);
 
-server.listen(process.env.PORT || 3000, () => console.log('ARPIT MOBILE ACCESS up'));
+if (!process.env.VERCEL) {
+  server.listen(process.env.PORT || 3000, () => console.log('ARPIT MOBILE ACCESS up on ' + (process.env.PORT || 3000)));
+}
+
+module.exports = server;
