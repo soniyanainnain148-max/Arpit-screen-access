@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 public class AgentService extends Service {
     public static volatile Intent projectionData;
     public static volatile int projectionResult = 0;
+    public static volatile boolean connected = false;
 
     private static AgentService self;
     public static Context get() { return self; }
