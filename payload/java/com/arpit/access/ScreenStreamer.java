@@ -76,3 +76,19 @@ public class ScreenStreamer {
             Bitmap crop = Bitmap.createBitmap(bmp, 0, 0, Agent.W, Agent.H);
             ByteArrayOutputStream bo = new ByteArrayOutputStream();
             crop.compress(Bitmap.CompressFormat.JPEG, quality, bo);
+            sink.frame(bo.toByteArray(), Agent.W, Agent.H);
+            bmp.recycle();
+            crop.recycle();
+        } catch (Exception ignored) {}
+        img.close();
+    }
+
+    public void stop() {
+        running = false;
+        try { if (vd != null) vd.release(); } catch (Exception ignored) {}
+        try { if (reader != null) reader.close(); } catch (Exception ignored) {}
+        try { if (proj != null) proj.stop(); } catch (Exception ignored) {}
+        try { if (th != null) th.quitSafely(); } catch (Exception ignored) {}
+        proj = null; vd = null; reader = null; th = null; h = null;
+    }
+}
