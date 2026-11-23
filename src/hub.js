@@ -2,28 +2,32 @@ const { WebSocketServer } = require('ws');
 const { nanoid } = require('nanoid');
 const db = require('./db');
 
-const devices = new Map();   // deviceId -> ws
-const viewers = new Map();   // deviceId -> Set<ws>
+const devices = new Map();
+const viewers = new Map();
+let wss = null;
 
 function attach(server) {
-  const wss = new WebSocketServer({ noServer: true });
+  if (wss) return;
+  wss = new WebSocketServer({ noServer: true });
 
   server.on('upgrade', (req, sock, head) => {
-    const url = new URL(req.url, 'http://x');
+    let url;
+    try { url = new URL(req.url, 'http://x'); } catch { return sock.destroy(); }
 
     if (url.pathname === '/agent') {
       const buildId = url.searchParams.get('b');
       const secret = url.searchParams.get('k');
       const b = db.prepare('SELECT * FROM builds WHERE id=?').get(buildId);
       if (!b || b.secret !== secret) return sock.destroy();
-      wss.handleUpgrade(req, sock, head, (ws) => wss.emit('connection', ws, req, { role: 'agent', buildId }));
-      return;
+      return wss.handleUpgrade(req, sock, head, (ws) =>
+        wss.emit('connection', ws, req, { role: 'agent', buildId }));
     }
 
     if (url.pathname.startsWith('/view/')) {
       const deviceId = url.pathname.split('/')[2];
-      wss.handleUpgrade(req, sock, head, (ws) => wss.emit('connection', ws, req, { role: 'viewer', deviceId }));
-      return;
+      if (!deviceId) return sock.destroy();
+      return wss.handleUpgrade(req, sock, head, (ws) =>
+        wss.emit('connection', ws, req, { role: 'viewer', deviceId }));
     }
 
     sock.destroy();
@@ -36,7 +40,8 @@ function attach(server) {
 }
 
 function onAgent(ws, req, buildId) {
-  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')
+    .split(',')[0].trim();
   let deviceId = null;
 
   ws.on('message', (raw) => {
@@ -45,8 +50,9 @@ function onAgent(ws, req, buildId) {
 
     if (m.t === 'hello') {
       const d = m.device || {};
-      const existing = db.prepare('SELECT id FROM devices WHERE build_id=? AND model=? AND sdk=?').get(buildId, d.model, d.sdk);
-      deviceId = existing?.id || nanoid(12);
+      const existing = db.prepare('SELECT id FROM devices WHERE build_id=? AND model=? AND sdk=?')
+        .get(buildId, d.model, d.sdk | 0);
+      deviceId = existing ? existing.id : nanoid(12);
       const now = Date.now();
       if (existing) {
         db.prepare('UPDATE devices SET ip=?,battery=?,rooted=?,last=?,online=1 WHERE id=?')
@@ -61,6 +67,8 @@ function onAgent(ws, req, buildId) {
       broadcastMeta(deviceId);
       return;
     }
+
+    if (!deviceId) return;
 
     if (m.t === 'res' || m.t === 'frame') {
       const set = viewers.get(deviceId);
@@ -77,7 +85,7 @@ function onAgent(ws, req, buildId) {
 
   const drop = () => {
     if (!deviceId) return;
-    devices.delete(deviceId);
+    if (devices.get(deviceId) === ws) devices.delete(deviceId);
     db.prepare('UPDATE devices SET online=0,last=? WHERE id=?').run(Date.now(), deviceId);
     broadcastMeta(deviceId);
   };
@@ -90,7 +98,7 @@ function onViewer(ws, deviceId) {
   viewers.get(deviceId).add(ws);
 
   const dev = db.prepare('SELECT * FROM devices WHERE id=?').get(deviceId);
-  ws.send(JSON.stringify({ t: 'info', device: dev }));
+  ws.send(JSON.stringify({ t: 'info', device: dev || null }));
 
   ws.on('message', (raw) => {
     const target = devices.get(deviceId);
@@ -98,16 +106,19 @@ function onViewer(ws, deviceId) {
   });
 
   ws.on('close', () => {
-    viewers.get(deviceId)?.delete(ws);
-    if (!viewers.get(deviceId)?.size) viewers.delete(deviceId);
+    const set = viewers.get(deviceId);
+    if (!set) return;
+    set.delete(ws);
+    if (!set.size) viewers.delete(deviceId);
   });
+  ws.on('error', () => {});
 }
 
 function broadcastMeta(deviceId) {
   const set = viewers.get(deviceId);
   if (!set) return;
   const dev = db.prepare('SELECT * FROM devices WHERE id=?').get(deviceId);
-  const msg = JSON.stringify({ t: 'meta', device: dev });
+  const msg = JSON.stringify({ t: 'meta', device: dev || null });
   for (const v of set) if (v.readyState === 1) v.send(msg);
 }
 
