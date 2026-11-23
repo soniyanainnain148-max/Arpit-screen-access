@@ -1,0 +1,61 @@
+:root{
+  --bg:#04070a; --panel:#0a1016; --line:#14232e;
+  --neon:#00ff9c; --dim:#6d8794; --warn:#ff3d6e; --text:#d6e6ee;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--text);
+  font:14px/1.5 "JetBrains Mono",ui-monospace,Consolas,monospace;
+  min-height:100vh;
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),
+                   linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:44px 44px;
+}
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:99;
+  background:repeating-linear-gradient(0deg,rgba(0,255,156,.035) 0 1px,transparent 1px 3px);
+}
+a{color:var(--neon);text-decoration:none}
+.wrap{max-width:1080px;margin:0 auto;padding:26px}
+header{
+  display:flex;justify-content:space-between;align-items:center;gap:14px;
+  padding:16px 22px;border:1px solid var(--line);background:#060b10;
+  box-shadow:0 0 0 1px rgba(0,255,156,.12),0 0 34px rgba(0,255,156,.07) inset;
+}
+.brand{font-weight:800;letter-spacing:.22em;font-size:13px;color:var(--neon)}
+.brand small{display:block;letter-spacing:.32em;color:var(--dim);font-weight:400;font-size:9px}
+h1{font-size:22px;letter-spacing:.06em;margin:26px 0 6px}
+h2{font-size:13px;letter-spacing:.24em;color:var(--dim);margin:30px 0 12px;text-transform:uppercase}
+.card{
+  border:1px solid var(--line);background:var(--panel);padding:16px;
+  position:relative;transition:.18s;
+}
+.card:hover{border-color:rgba(0,255,156,.4);box-shadow:0 0 26px rgba(0,255,156,.1)}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+input,select{
+  background:#060b10;border:1px solid var(--line);color:var(--text);
+  padding:10px 12px;font:inherit;outline:0;width:100%;
+}
+input:focus{border-color:var(--neon);box-shadow:0 0 0 3px rgba(0,255,156,.12)}
+button{
+  background:transparent;border:1px solid var(--neon);color:var(--neon);
+  padding:10px 16px;font:inherit;letter-spacing:.12em;cursor:pointer;transition:.15s;
+}
+button:hover{background:var(--neon);color:#02110a;box-shadow:0 0 22px rgba(0,255,156,.45)}
+button.ghost{border-color:var(--line);color:var(--dim)}
+button.ghost:hover{border-color:var(--neon);color:var(--neon);background:transparent}
+button.danger{border-color:var(--warn);color:var(--warn)}
+button.danger:hover{background:var(--warn);color:#fff}
+.tag{font-size:10px;letter-spacing:.18em;padding:3px 8px;border:1px solid var(--line);color:var(--dim)}
+.tag.on{color:var(--neon);border-color:rgba(0,255,156,.5);background:rgba(0,255,156,.08)}
+.tag.off{color:var(--warn);border-color:rgba(255,61,110,.4)}
+.mono{font-size:11px;color:var(--dim);word-break:break-all}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--dim);display:inline-block}
+.dot.live{background:var(--neon);box-shadow:0 0 10px var(--neon);animation:p 1.4s infinite}
+@keyframes p{50%{opacity:.35}}
+footer{margin:46px 0 26px;text-align:center;font-size:11px;letter-spacing:.2em;color:var(--dim)}
+footer b{color:var(--neon)}
+.hide{display:none!important}
+.stage{background:#000;border:1px solid var(--line);display:flex;justify-content:center;overflow:hidden}
+#screen{max-height:74vh;cursor:crosshair;touch-action:none}
