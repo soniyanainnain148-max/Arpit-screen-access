@@ -5,8 +5,7 @@
   "main": "src/server.js",
   "engines": { "node": "22.x" },
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node src/server.js",
+    "start": "node --max-old-space-size=192 src/server.js",
     "payload": "bash payload/build-payload.sh"
   },
   "dependencies": {
