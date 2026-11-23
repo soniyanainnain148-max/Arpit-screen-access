@@ -146,8 +146,7 @@ public class AgentService extends Service {
 
     private void retry() {
         ws = null;
-        new Handler(Looper.getMainLooper()).postDelayed(() -> { if (ws == null) connect(); }, 6000);
-    }
+        connected = false;
 
     private void send(String s) {
         if (ws == null) return;
