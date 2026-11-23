@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CONTROL — ARPIT MOBILE ACCESS</title>
+<link rel="stylesheet" href="/style.css">
+</head><body>
+<div class="wrap">
+  <header>
+    <div class="brand">ARPIT MOBILE ACCESS<small>CONTROL ROOM</small></div>
+    <span class="tag" id="stat">CONNECTING</span>
+  </header>
+
+  <h2 id="dev" style="margin-top:20px">—</h2>
+
+  <div class="row" style="margin-bottom:12px">
+    <button class="ghost" data-key="back">BACK</button>
+    <button class="ghost" data-key="home">HOME</button>
+    <button class="ghost" data-key="recents">RECENTS</button>
+    <button class="ghost" data-key="power">LOCK</button>
+    <button class="ghost" id="wake">WAKE</button>
+  </div>
+
+  <div class="stage"><canvas id="screen" width="360" height="740"></canvas></div>
+
+  <div class="row" style="margin-top:12px">
+    <input id="txt" placeholder="text bhejo..." style="flex:1;min-width:180px">
+    <button id="send">TYPE</button>
+    <button class="ghost" id="reconnect">RECONNECT</button>
+  </div>
+
+  <footer>Developed by <b>arpitff</b></footer>
+</div>
+<script>
+const parts = location.pathname.split('/');
+const buildId = parts[2], devId = parts[4];
+const $ = (s) => document.querySelector(s);
+const cv = $('#screen'), cx = cv.getContext('2d');
+let ws, n = 0, down = false, sx = 0, sy = 0;
+
+function open() {
+  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/view/${devId}`);
+  ws.onopen = () => { $('#stat').textContent = 'LINKED'; $('#stat').className = 'tag on'; ws.send(JSON.stringify({ t: 'cmd', id: ++n, op: 'screen', on: true, q: 45, max: 720 })); };
+  ws.onclose = () => { $('#stat').textContent = 'LOST'; $('#stat').className = 'tag off'; };
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.t === 'info' || m.t === 'meta') {
+      const d = m.device;
+      if (d) $('#dev').textContent = `${d.brand} ${d.model} · Android ${d.android} · ${d.battery ?? '?'}%`;
+    }
+    if (m.t === 'frame') {
+      const img = new Image();
+      img.onload = () => {
+        if (cv.width !== img.width) { cv.width = img.width; cv.height = img.height; }
+        cx.drawImage(img, 0, 0);
+      };
+      img.src = 'data:image/jpeg;base64,' + m.d;
+    }
+  };
+}
+open();
+
+const cmd = (op, extra = {}) => ws?.readyState === 1 && ws.send(JSON.stringify({ t: 'cmd', id: ++n, op, ...extra }));
+
+const norm = (e) => {
+  const r = cv.getBoundingClientRect();
+  return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+};
+
+cv.addEventListener('pointerdown', (e) => { down = true; const p = norm(e); sx = p.x; sy = p.y; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener('pointerup', (e) => {
+  if (!down) return; down = false;
+  const p = norm(e);
+  const dx = Math.abs(p.x - sx) * cv.width, dy = Math.abs(p.y - sy) * cv.height;
+  if (dx < 12 && dy < 12) cmd('tap', { x: p.x, y: p.y });
+  else cmd('swipe', { x1: sx, y1: sy, x2: p.x, y2: p.y, ms: 260 });
+});
+
+document.querySelectorAll('[data-key]').forEach(b => b.onclick = () => cmd('key', { code: b.dataset.key }));
+$('#wake').onclick = () => cmd('key', { code: 'wake' });
+$('#send').onclick = () => { cmd('text', { s: $('#txt').value }); $('#txt').value = ''; };
+$('#reconnect').onclick = () => { ws?.close(); open(); };
+</script>
+</body></html>
