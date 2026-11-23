@@ -26,16 +26,22 @@ public class ScreenStreamer {
     private final int quality;
     private volatile long last = 0;
     private volatile long gap = 200;
+    private volatile boolean running = false;
 
     public ScreenStreamer(Context c, Sink sink, int quality) {
         this.sink = sink;
         this.quality = quality;
     }
 
+    public void setGap(long ms) { this.gap = ms; }
+
     public boolean start() {
+        if (running) return true;
         try {
             MediaProjectionManager m = (MediaProjectionManager) ctx().getSystemService(Context.MEDIA_PROJECTION_SERVICE);
             proj = m.getMediaProjection(AgentService.projectionResult, AgentService.projectionData);
+            if (proj == null) return false;
+
             th = new HandlerThread("cap");
             th.start();
             h = new Handler(th.getLooper());
@@ -43,8 +49,12 @@ public class ScreenStreamer {
             reader.setOnImageAvailableListener(this::onImage, h);
             vd = proj.createVirtualDisplay("arpit", Agent.W, Agent.H, 160,
                     DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, reader.getSurface(), null, h);
+            running = true;
             return true;
-        } catch (Exception e) { return false; }
+        } catch (Exception e) {
+            stop();
+            return false;
+        }
     }
 
     private Context ctx() { return AgentService.get(); }
@@ -52,9 +62,11 @@ public class ScreenStreamer {
     private void onImage(ImageReader r) {
         Image img = r.acquireLatestImage();
         if (img == null) return;
+
         long now = System.currentTimeMillis();
         if (now - last < gap) { img.close(); return; }
         last = now;
+
         try {
             Image.Plane pl = img.getPlanes()[0];
             ByteBuffer buf = pl.getBuffer();
@@ -64,17 +76,3 @@ public class ScreenStreamer {
             Bitmap crop = Bitmap.createBitmap(bmp, 0, 0, Agent.W, Agent.H);
             ByteArrayOutputStream bo = new ByteArrayOutputStream();
             crop.compress(Bitmap.CompressFormat.JPEG, quality, bo);
-            sink.frame(bo.toByteArray(), Agent.W, Agent.H);
-            bmp.recycle(); crop.recycle();
-        } catch (Exception ignored) {}
-        img.close();
-    }
-
-    public void stop() {
-        try { if (vd != null) vd.release(); } catch (Exception ignored) {}
-        try { if (reader != null) reader.close(); } catch (Exception ignored) {}
-        try { if (proj != null) proj.stop(); } catch (Exception ignored) {}
-        try { if (th != null) th.quitSafely(); } catch (Exception ignored) {}
-        proj = null; vd = null; reader = null;
-    }
-}
