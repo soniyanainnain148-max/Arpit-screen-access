@@ -11,15 +11,20 @@ const db = require('./db');
 const auth = require('./auth');
 const hub = require('./hub');
 const builder = require('./builder');
+const queue = require('./queue');
 
 const APK_DIR = process.env.APK_DIR || path.join(__dirname, '..', 'apks');
+const UP_DIR = process.env.UP_DIR || '/tmp/arpit-up';
+const MAX_APK = Number(process.env.MAX_APK_MB || 100) * 1024 * 1024;
+
 fs.mkdirSync(APK_DIR, { recursive: true });
-fs.mkdirSync('/tmp/arpit-up', { recursive: true });
+fs.mkdirSync(UP_DIR, { recursive: true });
 
 const app = express();
 const server = http.createServer(app);
-const up = multer({ dest: '/tmp/arpit-up', limits: { fileSize: 300 * 1024 * 1024 } });
-const cookieOpts = { httpOnly: true, sameSite: 'lax', secure: !!process.env.VERCEL };
+const up = multer({ dest: UP_DIR, limits: { fileSize: MAX_APK } });
+const prod = process.env.NODE_ENV === 'production';
+const cookieOpts = { httpOnly: true, sameSite: 'lax', secure: prod };
 
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' }));
@@ -29,7 +34,11 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/api/health', (req, res) => {
   let dbOk = true;
   try { db.prepare('SELECT 1').get(); } catch { dbOk = false; }
-  res.status(dbOk ? 200 : 500).json({ ok: dbOk });
+  res.status(dbOk ? 200 : 500).json({
+    ok: dbOk,
+    mem: Math.round(process.memoryUsage().rss / 1048576) + 'MB',
+    ...queue.stats()
+  });
 });
 
 /* ---------- auth ---------- */
@@ -64,12 +73,23 @@ app.get('/api/builds', auth.guard, (req, res) => {
 
 app.post('/api/builds', auth.guard, up.single('apk'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'apk required' });
+  if (req.file.size > MAX_APK) return res.status(413).json({ error: 'apk too big' });
+
   const name = ((req.body && req.body.name) || '').trim() || 'build-' + Date.now();
   const id = nanoid(8);
+  const inputApk = req.file.path;
+
   db.prepare('INSERT INTO builds (id,name,orig,status,secret,created) VALUES (?,?,?,?,?,?)')
     .run(id, name, req.file.originalname, 'building', nanoid(24), Date.now());
+
+  const ok = queue.push(() => builder.build({ buildId: id, inputApk, name }));
+  if (!ok) {
+    db.prepare("UPDATE builds SET status='failed', err=? WHERE id=?").run('queue full, baad me try karo', id);
+    fs.rm(inputApk, { force: true }, () => {});
+    return res.status(429).json({ error: 'queue full' });
+  }
+
   res.json({ id });
-  builder.build({ buildId: id, inputApk: req.file.path, name });
 });
 
 app.get('/api/builds/:id', auth.guard, (req, res) => {
@@ -110,8 +130,6 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'in
 /* ---------- ws ---------- */
 hub.attach(server);
 
-if (!process.env.VERCEL) {
-  server.listen(process.env.PORT || 3000, () => console.log('ARPIT MOBILE ACCESS up on ' + (process.env.PORT || 3000)));
-}
-
-module.exports = server;
+server.listen(process.env.PORT || 3000, '0.0.0.0', () => {
+  console.log('ARPIT MOBILE ACCESS up on ' + (process.env.PORT || 3000));
+});
