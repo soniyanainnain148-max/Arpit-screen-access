@@ -2,7 +2,7 @@ const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = process.env.DB_PATH || (process.env.VERCEL ? '/tmp/arpit.db' : './data/app.db');
+const DB_PATH = process.env.DB_PATH || './data/app.db';
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const db = new Database(DB_PATH);
