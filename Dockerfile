@@ -1,6 +1,8 @@
 FROM node:22-bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
     ANDROID_HOME=/opt/android \
     JAVA_TOOL_OPTIONS="-Xmx256m"
 
@@ -28,7 +30,7 @@ ENV ANDROID_JAR=/opt/android/platforms/android-34/android.jar \
 
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev || npm i --omit=dev
+RUN npm i --omit=dev --no-audit --no-fund
 COPY . .
 
 # payload dex image build ke waqt — runtime pe javac nahi chahiye
