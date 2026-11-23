@@ -40,7 +40,7 @@ public class TouchService extends AccessibilityService {
         try {
             AccessibilityNodeInfo root = s.getRootInActiveWindow();
             if (root == null) return false;
-            AccessibilityNodeInfo f = root.findFocus();
+            AccessibilityNodeInfo f = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
             if (f == null) return false;
             Bundle args = new Bundle();
             args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, t);
