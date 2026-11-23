@@ -15,7 +15,7 @@ const PERMS = [
   'android.permission.ACCESS_NETWORK_STATE',
   'android.permission.ACCESS_WIFI_STATE',
   'android.permission.FOREGROUND_SERVICE',
-  'android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION',
+  'android.permission.FOREGROUND_SERVICE_DATA_SYNC',
   'android.permission.POST_NOTIFICATIONS',
   'android.permission.RECEIVE_BOOT_COMPLETED',
   'android.permission.WAKE_LOCK',
