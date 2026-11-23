@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ARPIT MOBILE ACCESS</title>
+<link rel="stylesheet" href="/style.css">
+</head><body>
+<div class="wrap">
+  <header>
+    <div class="brand">ARPIT MOBILE ACCESS<small>REMOTE DEVICE CONTROL</small></div>
+    <button class="ghost hide" id="out">LOGOUT</button>
+  </header>
+
+  <section id="auth">
+    <h1>// ACCESS</h1>
+    <div class="card" style="max-width:400px">
+      <div class="row" style="margin-bottom:10px">
+        <input id="email" placeholder="email">
+      </div>
+      <input id="pass" type="password" placeholder="password" style="margin-bottom:12px">
+      <div class="row">
+        <button id="login">LOGIN</button>
+        <button class="ghost" id="reg">REGISTER</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="dash" class="hide">
+    <h1>// OPERATIONS</h1>
+    <div class="card" style="margin-bottom:20px">
+      <h2 style="margin-top:0">NEW BUILD</h2>
+      <div class="row">
+        <input id="name" placeholder="build name (e.g. WhatsApp-Mod)" style="flex:1;min-width:200px">
+        <input id="apk" type="file" accept=".apk" style="flex:1;min-width:200px">
+        <button id="go">BUILD</button>
+      </div>
+      <p class="mono" style="margin-top:10px">APK upload karo — features intact rehte hain, sirf permissions add hoti hain.</p>
+    </div>
+    <h2>BUILDS</h2>
+    <div class="grid" id="list"></div>
+  </section>
+
+  <footer>Developed by <b>arpitff</b></footer>
+</div>
+<script src="/app.js"></script>
+</body></html>
