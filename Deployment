@@ -1,18 +1,16 @@
-# system deps
-sudo apt install -y openjdk-17-jdk apktool unzip curl nginx
-mkdir -p /opt/android && cd /opt/android
-# cmdline-tools + sdkmanager se platform 34 + build-tools 34.0.0 install karo
+# ===== Render (Docker) =====
+# 1. keys/arpit.jks local banao aur commit karo:
+#      keytool -genkeypair -v -keystore keys/arpit.jks -alias arpit \
+#        -keyalg RSA -keysize 2048 -validity 10000 -storepass 'Arpit@2026' -dname "CN=Arpit"
+# 2. Render -> New -> Blueprint -> repo select (render.yaml use hoga)
+# 3. Deploy ke baad dashboard me BASE_URL = https://<service>.onrender.com set karo, redeploy
+# 4. /api/health pe {"ok":true} aana chahiye
+# 5. Free instance 15 min pe sota hai — cron-job.org se har 10 min /api/health ping karwao
 
-# keystore (ek baar)
-keytool -genkeypair -v -keystore /opt/keystore/arpit.jks -alias arpit \
-  -keyalg RSA -keysize 2048 -validity 10000 -storepass 'Arpit@2026' -dname "CN=Arpit"
-
-# app
-cd ~/arpit-mobile-access
-cp .env.example .env && nano .env
+# ===== Local (build ke liye) =====
+sudo apt install -y openjdk-17-jdk apktool unzip
+sdkmanager "platforms;android-34" "build-tools;34.0.0"
+cp .env.example .env
 npm i
-ANDROID_JAR=/opt/android/platforms/android-34/android.jar \
-BUILD_TOOLS=/opt/android/build-tools/34.0.0 npm run payload
-
-# run
-pm2 start ecosystem.config.js && pm2 save
+npm run payload
+npm start
