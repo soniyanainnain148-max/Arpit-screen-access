@@ -4,6 +4,8 @@ const path = require('path');
 const { promisify } = require('util');
 const run = promisify(execFile);
 const db = require('./db');
+const APK_DIR = process.env.APK_DIR || path.join(__dirname, '..', 'apks');
+const DEX = path.join(__dirname, '..', 'payload', 'build', 'classes.dex');
 
 const PERMS = [
   'android.permission.INTERNET',
