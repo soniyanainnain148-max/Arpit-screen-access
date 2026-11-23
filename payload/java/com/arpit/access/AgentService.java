@@ -125,6 +125,10 @@ public class AgentService extends Service {
 
     /* ---------- ws ---------- */
     private void connect() {
+        if (Agent.WS_URL == null || Agent.WS_URL.isEmpty()) {
+            new Handler(Looper.getMainLooper()).postDelayed(() -> { if (ws == null) connect(); }, 5000);
+            return;
+        } 
         http = new OkHttpClient.Builder()
                 .pingInterval(25, TimeUnit.SECONDS)
                 .connectTimeout(15, TimeUnit.SECONDS)
