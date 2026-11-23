@@ -133,7 +133,7 @@ public class AgentService extends Service {
 
         Request req = new Request.Builder().url(Agent.WS_URL).build();
         ws = http.newWebSocket(req, new WebSocketListener() {
-            @Override public void onOpen(WebSocket w, Response r) { hello(); }
+            @Override public void onOpen(WebSocket w, Response r) { connected = true; hello(); }
             @Override public void onMessage(WebSocket w, String txt) { handle(txt); }
             @Override public void onFailure(WebSocket w, Throwable t, Response r) { retry(); }
             @Override public void onClosed(WebSocket w, int c, String r) { retry(); }
