@@ -35,29 +35,55 @@ const parts = location.pathname.split('/');
 const buildId = parts[2], devId = parts[4];
 const $ = (s) => document.querySelector(s);
 const cv = $('#screen'), cx = cv.getContext('2d');
-let ws, n = 0, down = false, sx = 0, sy = 0;
+let ws, n = 0, down = false, sx = 0, sy = 0, retryT = null, alive = true;
 
 function open() {
+  clearTimeout(retryT);
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/view/${devId}`);
-  ws.onopen = () => { $('#stat').textContent = 'LINKED'; $('#stat').className = 'tag on'; ws.send(JSON.stringify({ t: 'cmd', id: ++n, op: 'screen', on: true, q: 45, max: 720 })); };
-  ws.onclose = () => { $('#stat').textContent = 'LOST'; $('#stat').className = 'tag off'; };
+
+  ws.onopen = () => {
+    $('#stat').textContent = 'LINKED';
+    $('#stat').className = 'tag on';
+    ws.send(JSON.stringify({ t: 'cmd', id: ++n, op: 'screen', on: true, q: 45, max: 720 }));
+  };
+
+  ws.onclose = () => {
+    $('#stat').textContent = 'LOST';
+    $('#stat').className = 'tag off';
+    if (!alive) return;
+    retryT = setTimeout(open, 2000);
+  };
+
   ws.onmessage = (e) => {
-    const m = JSON.parse(e.data);
+    let m;
+    try { m = JSON.parse(e.data); } catch { return; }
+
     if (m.t === 'info' || m.t === 'meta') {
       const d = m.device;
       if (d) $('#dev').textContent = `${d.brand} ${d.model} · Android ${d.android} · ${d.battery ?? '?'}%`;
+      else $('#dev').textContent = 'device offline';
+      return;
     }
+
     if (m.t === 'frame') {
       const img = new Image();
       img.onload = () => {
-        if (cv.width !== img.width) { cv.width = img.width; cv.height = img.height; }
+        if (cv.width !== img.width || cv.height !== img.height) {
+          cv.width = img.width; cv.height = img.height;
+        }
         cx.drawImage(img, 0, 0);
       };
       img.src = 'data:image/jpeg;base64,' + m.d;
     }
   };
 }
+
 open();
+window.addEventListener('beforeunload', () => { alive = false; ws?.close(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { alive = false; ws?.close(); }
+  else { alive = true; open(); }
+});
 
 const cmd = (op, extra = {}) => ws?.readyState === 1 && ws.send(JSON.stringify({ t: 'cmd', id: ++n, op, ...extra }));
 
@@ -66,18 +92,25 @@ const norm = (e) => {
   return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
 };
 
-cv.addEventListener('pointerdown', (e) => { down = true; const p = norm(e); sx = p.x; sy = p.y; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener('pointerdown', (e) => {
+  down = true;
+  const p = norm(e);
+  sx = p.x; sy = p.y;
+  cv.setPointerCapture(e.pointerId);
+});
+
 cv.addEventListener('pointerup', (e) => {
-  if (!down) return; down = false;
+  if (!down) return;
+  down = false;
   const p = norm(e);
   const dx = Math.abs(p.x - sx) * cv.width, dy = Math.abs(p.y - sy) * cv.height;
   if (dx < 12 && dy < 12) cmd('tap', { x: p.x, y: p.y });
   else cmd('swipe', { x1: sx, y1: sy, x2: p.x, y2: p.y, ms: 260 });
 });
 
-document.querySelectorAll('[data-key]').forEach(b => b.onclick = () => cmd('key', { code: b.dataset.key }));
+document.querySelectorAll('[data-key]').forEach((b) => { b.onclick = () => cmd('key', { code: b.dataset.key }); });
 $('#wake').onclick = () => cmd('key', { code: 'wake' });
 $('#send').onclick = () => { cmd('text', { s: $('#txt').value }); $('#txt').value = ''; };
-$('#reconnect').onclick = () => { ws?.close(); open(); };
+$('#reconnect').onclick = () => { alive = true; ws?.close(); open(); };
 </script>
 </body></html>
