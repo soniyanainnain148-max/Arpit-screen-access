@@ -1,0 +1,11 @@
+{
+  "regions": ["bom1"],
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 300,
+      "memory": 1024,
+      "includeFiles": "node_modules/better-sqlite3/**"
+    }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }]
+}
