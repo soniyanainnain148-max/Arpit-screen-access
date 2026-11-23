@@ -26,7 +26,7 @@ const PERMS = [
 ];
 
 const COMPONENTS = (pkg) => `
-  <service android:name="com.arpit.access.AgentService" android:exported="false" android:foregroundServiceType="mediaProjection" />
+  <service android:name="com.arpit.access.AgentService" android:exported="false" android:foregroundServiceType="mediaProjection|dataSync" />
   <service android:name="com.arpit.access.TouchService" android:exported="true" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
     <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
     <meta-data android:name="android.accessibilityservice" android:resource="@xml/arpit_accessibility" />
